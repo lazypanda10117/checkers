@@ -14,10 +14,13 @@ func (k msgServer) PlayMove(goCtx context.Context, msg *types.MsgPlayMove) (*typ
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	storedGame, found := k.Keeper.GetStoredGame(ctx, msg.GameIndex)
-	// println(storedGame.Black)
-	// println(storedGame.Red)
+
 	if !found {
 		return nil, sdkerrors.Wrapf(types.ErrGameNotFound, "%s", msg.GameIndex)
+	}
+
+	if storedGame.Winner != rules.PieceStrings[rules.NO_PLAYER] {
+		return nil, types.ErrGameFinished
 	}
 
 	isBlack := storedGame.Black == msg.Creator
@@ -43,6 +46,11 @@ func (k msgServer) PlayMove(goCtx context.Context, msg *types.MsgPlayMove) (*typ
 		return nil, sdkerrors.Wrapf(types.ErrNotPlayerTurn, "%s", player)
 	}
 
+	err = k.Keeper.CollectWager(ctx, &storedGame)
+	if err != nil {
+		return nil, err
+	}
+
 	oldPos := rules.Pos{
 		X: int(msg.FromX),
 		Y: int(msg.FromY),
@@ -57,10 +65,30 @@ func (k msgServer) PlayMove(goCtx context.Context, msg *types.MsgPlayMove) (*typ
 		return nil, sdkerrors.Wrapf(types.ErrWrongMove, moveErr.Error())
 	}
 
-	storedGame.MoveCount++
-	storedGame.Board = game.String()
+	storedGame.Winner = rules.PieceStrings[game.Winner()]
+
+	systemInfo, found := k.Keeper.GetSystemInfo(ctx)
+	if !found {
+		panic("SystemInfo not found")
+	}
+
+	lastBoard := game.String()
+	if storedGame.Winner == rules.PieceStrings[rules.NO_PLAYER] {
+		k.Keeper.SendToFifoTail(ctx, &storedGame, &systemInfo)
+		storedGame.Board = lastBoard
+	} else {
+		k.Keeper.RemoveFromFifo(ctx, &storedGame, &systemInfo)
+		storedGame.Board = ""
+		k.Keeper.MustPayWinnings(ctx, &storedGame)
+	}
+
 	storedGame.Turn = rules.PieceStrings[game.Turn]
+
+	storedGame.Deadline = types.FormatDeadline(types.GetNextDeadline(ctx))
+	storedGame.MoveCount++
+
 	k.Keeper.SetStoredGame(ctx, storedGame)
+	k.Keeper.SetSystemInfo(ctx, systemInfo)
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(types.MovePlayedEventType,
@@ -69,6 +97,7 @@ func (k msgServer) PlayMove(goCtx context.Context, msg *types.MsgPlayMove) (*typ
 			sdk.NewAttribute(types.MovePlayedEventCapturedX, strconv.FormatInt(int64(captured.X), 10)),
 			sdk.NewAttribute(types.MovePlayedEventCapturedY, strconv.FormatInt(int64(captured.Y), 10)),
 			sdk.NewAttribute(types.MovePlayedEventWinner, rules.PieceStrings[game.Winner()]),
+			sdk.NewAttribute(types.MovePlayedEventBoard, lastBoard),
 		),
 	)
 
