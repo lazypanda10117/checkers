@@ -1,9 +1,9 @@
 package testutil
 
 const (
-	Alice = "cosmos1jqq546zgfhemhyztfsc7fpmcz44skzfxu0t7eq"
-	Bob   = "cosmos1enyttm3m6pr9u458062vxm0xqnmrh9jxks7l69"
-	Carol = "cosmos1uvh2k0gl3j3lc540l5yvgr5e502sdc0g0uedzv"
+	Alice = "cosmos146dsp3cf79y85mny8rnnnmpveg24kpqpntdces"
+	Bob   = "cosmos1ae26g9qyldr5uun48asmulxs6zfpervktr9hrk"
+	Carol = "cosmos1g8p0ax849hh2p9cgfmfd4xr93ytjzgzlppnfhd"
 )
 
 // alias checkersd=~/go/bin/checkersd
